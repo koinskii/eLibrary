@@ -1,5 +1,5 @@
 import React from "react"
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ImageBackground, ToastAndroid, Alert, Platform } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ImageBackground, ToastAndroid, Alert, Platform, KeyboardAvoidingView} from "react-native";
 import * as Permissions from 'expo-permissions'
 import { BarCodeScanner } from "expo-barcode-scanner"
 import db from "../config"
@@ -168,7 +168,7 @@ export default class Transaction extends React.Component {
 
 
   render() {
-    const { domState, hasCameraPermissons, scanned, scannedData, bookId, StudentId } = this.state
+    const { domState, hasCameraPermissons, scanned, scannedData, bookId, studentId } = this.state
 
     if (domState !== 'normal') {
       return (
@@ -179,7 +179,7 @@ export default class Transaction extends React.Component {
       )
     }
     return (
-      <View style={styles.container}>
+      <KeyboardAvoidingView style={styles.container} behavior="padding">
         <ImageBackground source={bgImage} style={styles.bgImage}>
           <View style={styles.lowerContainer}>
             <View style={styles.textinputContainer}>
@@ -220,7 +220,7 @@ export default class Transaction extends React.Component {
 
           </View>
         </ImageBackground>
-      </View>
+      </KeyboardAvoidingView>
     )
   }
 }
