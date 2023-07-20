@@ -1,9 +1,10 @@
 import React from "react"
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ImageBackground, ToastAndroid, Alert, Platform, KeyboardAvoidingView} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ImageBackground, ToastAndroid, Alert, Platform, KeyboardAvoidingView } from "react-native";
 import * as Permissions from 'expo-permissions'
 import { BarCodeScanner } from "expo-barcode-scanner"
 import db from "../config"
 import firebase from "firebase";
+
 var bgImage = require("../assets/background2.png")
 var imgIcon = require("../assets/appIcon.png")
 var appName = require("../assets/appName.png")
@@ -55,31 +56,45 @@ export default class Transaction extends React.Component {
     bookId = bookId.trim().toLowerCase();
     await this.getBookDetails(bookId);
     await this.getStudentDetails(studentId);
-    db.collection("Books")
-      .doc(bookId)
-      .get()
-      .then((doc) => {
-        console.log(doc.data())
-        var book = doc.data()
-        var { bookName, studentName } = this.state
-        if (book.is_book_available) {
-          this.initiateBookIssue(bookId, studentId, bookName, studentName)
-          if (Platform.OS == "android") {
-            ToastAndroid.show("Livro retirado com sucesso!!", ToastAndroid.SHORT)
-          } else {
-            Alert.alert("LIvro retirado com sucesso!!")
-          }
-        } else {
-          this.initiateBookReturn(bookId, studentId, bookName, studentName)
-          if (Platform.OS == "android") {
-            ToastAndroid.show("Livro devolvido com sucesso!!", ToastAndroid.SHORT)
-          } else {
-            Alert.alert("LIvro devolvido com sucesso!!")
-          }
-        }
-
+    var transactionType = await this.checkBookAvailability(bookId)
+    var { bookName, studentName } = this.state
+    if (!transactionType) {
+      if (Platform.OS == "android") {
+        ToastAndroid.show("Livro não encontrado!!", ToastAndroid.SHORT)
+      } else {
+        Alert.alert("Livro não encontrado!!")
+      }
+      this.setState({
+        bookId: "",
+        studentId: "",
       })
+    }
+    else if (transactionType == "issue") {
+      var isElegible = await this.checkStudentEligibilityForBookIssue(studentId)
+      if (isElegible) {
+
+
+        this.initiateBookIssue(bookId, studentId, bookName, studentName)
+        if (Platform.OS == "android") {
+          ToastAndroid.show("Livro retirado com sucesso!!", ToastAndroid.SHORT)
+        } else {
+          Alert.alert("Livro retirado com sucesso!!")
+        }
+      }
+    } else if (transactionType == "return") {
+      var isElegible = await this.checkStudentEligibilityForBookReturn(bookId, studentId)
+      if (isElegible) {
+        this.initiateBookReturn(bookId, studentId, bookName, studentName)
+        if (Platform.OS == "android") {
+          ToastAndroid.show("Livro devolvido com sucesso!!", ToastAndroid.SHORT)
+        } else {
+          Alert.alert("Livro devolvido com sucesso!!")
+        }
+      }
+    }
+
   }
+
 
   getBookDetails = (bookId) => {
     db.collection("books")
@@ -166,6 +181,81 @@ export default class Transaction extends React.Component {
     });
   };
 
+  checkBookAvailability = async (bookId) => {
+    var bookRef = await db.collection("books")
+      .where('book_id', "==", bookId).get()
+
+    var transactionType = ""
+    if (bookRef.docs.length == 0) {
+      transactionType = false
+    } else {
+      bookRef.docs.map(doc => {
+        transactionType = doc.data().is_book_available ? "issue" : "return"
+      })
+    }
+    return transactionType
+  }
+
+  checkStudentEligibilityForBookIssue = async (student_id) => {
+    var studentRef = await db.collection("students")
+      .where('student_id', '==', student_id).get()
+
+    var isStudentsElegible = ''
+    if (studentRef.docs.length == 0) {
+      this.setState({
+        bookId: "",
+        studentId: ""
+      });
+      isStudentsElegible = false
+      if (Platform.OS == "android") {
+        ToastAndroid.show("Estudante não encontrado!!", ToastAndroid.SHORT)
+      } else {
+        Alert.alert("Estudante não encontrado!!")
+      }
+    } else {
+      studentRef.docs.map(doc => {
+        if (doc.data().number_of_books_issued < 2) {
+          isStudentsElegible = true
+        } else {
+          if (studentRef.docs.length == 0) {
+            this.setState({
+              bookId: "",
+              studentId: ""
+            });
+            isStudentsElegible = false
+            if (Platform.OS == "android") {
+              ToastAndroid.show("Estudante já retirou dois livros!!", ToastAndroid.SHORT)
+            } else {
+              Alert.alert("Estudante já retirou dois livros!!")
+            }
+
+          }
+        }
+      })
+    }
+    return isStudentsElegible
+  }
+
+  checkStudentEligibilityForBookReturn = async (bookId, studentId) => {
+    var transactionRef = await db.collection('transactions')
+      .where('book_id', '==', bookId).limit(1).get()
+
+    var isStudentsElegible = ''
+    transactionRef.docs.map(doc => {
+      var lastBookTransaction = doc.data()
+      if (lastBookTransaction.student_id == studentId) {
+        isStudentsElegible = true
+      } else {
+        isStudentsElegible = false
+        this.setState({
+          bookId: "",
+          studentId: "",
+        })
+        Alert.alert('Livro não foi retirado por esse aluno!!')
+      }
+    })
+    return isStudentsElegible
+  }
 
   render() {
     const { domState, hasCameraPermissons, scanned, scannedData, bookId, studentId } = this.state
@@ -214,7 +304,7 @@ export default class Transaction extends React.Component {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.button} onPress={() => this.handleTranscation()}>
+            <TouchableOpacity style={styles.button} onPress={() => this.handleTransactions()}>
               <Text style={styles.buttonText}>Enviar</Text>
             </TouchableOpacity>
 
@@ -224,6 +314,7 @@ export default class Transaction extends React.Component {
     )
   }
 }
+
 
 const styles = StyleSheet.create({
   container: {
