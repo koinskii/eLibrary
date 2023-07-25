@@ -10,7 +10,7 @@ export default class Search extends React.Component {
         this.state = {
             allTransactions: [],
             searchText: '',
-            lastVisibleTransaction: '',
+            lastVisibleTransaction: null,
 
         }
     }
@@ -19,15 +19,18 @@ export default class Search extends React.Component {
     }
 
     getTransaction = () => {
-        db.collection('transactions').get().then(
-            snapshot => {
-                snapshot.docs.map(doc => {
-                    this.setState({
-                        allTransactions: [...this.state.allTransactions, doc.data()]
+        db.collection('transactions')
+            .limit(10)
+            .get().then(
+                snapshot => {
+                    snapshot.docs.map(doc => {
+                        this.setState({
+                            allTransactions: [...this.state.allTransactions, doc.data()],
+                            lastVisibleTransaction: doc
+                        })
                     })
-                })
-            }
-        )
+                }
+            )
     }
 
     renderItem = ({ item, i }) => {
@@ -125,6 +128,46 @@ export default class Search extends React.Component {
         }
     };
 
+    fetchMoreTransactions = async (text) => {
+        var enteredText = text.toUpperCase().split()
+        text = text.toLowerCase()
+        this.setState({
+            allTransactions: [] //zerando as transações
+        });
+        if (!text) {
+            this.getTransactions(); //se o texto estiver em branco chamo as transações
+        }
+        const { lastVisibleTransaction, allTransactions } = this.state
+        if (enteredText[0] == 'B') {
+            const query = await db.collection('transactions')
+                .where('book_id', '==', text)
+                .startAfter(lastVisibleTransaction)
+                .limit(10)
+                .get()
+            query.docs.map(doc => {
+                this.setState({
+                    allTransactions: [...this.state.allTransactions, doc.data()],
+                    lastVisibleTransaction: doc
+                })
+            })
+
+        } else if(enteredText[0]=='S') {
+            const query = await db.collection('transactions')
+            .where('student_id', '==', text)
+            .startAfter(lastVisibleTransaction)
+            .limit(10)
+            .get()
+        query.docs.map(doc => {
+            this.setState({
+                allTransactions: [...this.state.allTransactions, doc.data()],
+                lastVisibleTransaction: doc
+            })
+        })
+        }
+
+
+    }
+
 
     render() {
         const { allTransactions, searchText } = this.state
@@ -137,8 +180,8 @@ export default class Search extends React.Component {
                             placeholder="Digite Aqui"
                             placeholderTextColor={"#fff"}
                         />
-                        <TouchableOpacity style={styles.scanbutton} 
-                        onPress={()=>{this.handleSearch(searchText)}}>
+                        <TouchableOpacity style={styles.scanbutton}
+                            onPress={() => { this.handleSearch(searchText) }}>
                             <Text style={styles.scanbuttonText}>
                                 Consultar
                             </Text>
@@ -150,6 +193,8 @@ export default class Search extends React.Component {
                         data={allTransactions}
                         renderItem={this.renderItem}
                         keyExtractor={(item, index) => { index.toString() }}
+                        onEndReached={()=>{this.fetchMoreTransactions(searchText)} }
+                        onEndReachedThreshold={0.7}
                     />
 
                 </View>
